@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from itertools import pairwise
 from math import isfinite, prod
+from operator import itemgetter
+from struct import pack
 from typing import Any
 
 import numpy as np
@@ -162,15 +164,21 @@ def encode_result(result: dict[str, Any]) -> bytes | None:
         if result.get("topk_prompt_logprobs") is not None:
             rows = result["topk_prompt_logprobs"]
             k = max((len(row or ()) for row in rows), default=0)
-            tokens = np.zeros((len(rows), k), dtype="<i4")
-            logprobs = np.full((len(rows), k), -99999.0, dtype="<f4")
-            for i, row in enumerate(rows):
-                for j, (token, logprob) in enumerate(row or ()):
-                    tokens[i, j], logprobs[i, j] = token, logprob
+            flat = []
+            for row in rows:
+                row = row or ()
+                flat.extend(row)
+                pad = k - len(row)
+                if pad:
+                    flat.extend([(0, -99999.0)] * pad)
+            count = len(flat)
+            # Pack padded rows in bulk; per-element numpy assignment dominated this path.
+            token_ids = pack(f"<{count}i", *map(itemgetter(0), flat))
+            logprobs = pack(f"<{count}f", *map(itemgetter(1), flat))
             message.topk_prompt_logprobs.CopyFrom(
                 pb.TopkLogprobs(
-                    token_ids=tokens.tobytes(),
-                    logprobs=logprobs.tobytes(),
+                    token_ids=token_ids,
+                    logprobs=logprobs,
                     length=len(rows),
                     k=k,
                 )
