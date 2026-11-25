@@ -68,6 +68,18 @@ def test_native_capture_rejects_incomplete_checkpoint(
     assert not list(tmp_path.glob("*.tmp"))
 
 
+def test_existing_target_keeps_valid_capture(tmp_path: Path) -> None:
+    source = tmp_path / ".capture.1234"
+    source.mkdir()
+    (source / "adapter_config.json").write_text("{}")
+    (source / "adapter_model.safetensors").write_bytes(b"weights")
+    target = tmp_path / "capture"
+    target.mkdir()
+    with pytest.raises(FileExistsError):
+        materialize_adapter(source, target, checkpoint=False)
+    assert source.exists()
+
+
 @pytest.mark.parametrize(
     "missing", ["adapter_config.json", "adapter_model.safetensors"]
 )
