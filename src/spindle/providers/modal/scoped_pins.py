@@ -41,7 +41,10 @@ async def pin_demand(registry, *, now, routes=None):
             }
             live[key] = record
         else:
-            await registry.pop.aio(key, None)
+            # Demand may have been renewed since the snapshot; recheck before deleting its route.
+            current = await registry.get.aio("pin_records") or {}
+            if key not in current or not wanted(current[key], now):
+                await registry.pop.aio(key, None)
     await registry.put.aio("pin_records", live)
     # Repair a route lost during cleanup/RPC races without opening a duplicate app.
     for key, route in (routes or {}).items():
