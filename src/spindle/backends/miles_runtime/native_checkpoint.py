@@ -61,6 +61,9 @@ def materialize_adapter(source: Path, target: Path, *, checkpoint: bool) -> None
         if target.exists():
             raise FileExistsError(f"capture already exists: {target}")
         os.rename(source, target)
+    except FileExistsError:
+        # A taken target keeps the fresh capture; only failed publishes are cleaned.
+        raise
     except Exception:
         shutil.rmtree(source, ignore_errors=True)
         raise
