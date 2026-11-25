@@ -73,6 +73,32 @@ def test_cleanup_cannot_erase_replacement_route_or_refreshed_demand():
     asyncio.run(check())
 
 
+def test_cleanup_rechecks_demand_before_deleting_a_replacement_route():
+    async def check():
+        renewed = False
+        replacement = {"url": "new"}
+
+        class Interleaved(Registry):
+            async def read(self, key):
+                value = await super().read(key)
+                if key == "pin_records":
+                    value = {k: dict(v) for k, v in value.items()}
+                    nonlocal renewed
+                    if not renewed:
+                        renewed = True
+                        await touch_pin(self, "pin", now=1700)
+                        await publish_pin(self, "pin", replacement, now=1700)
+                return value
+
+        registry = Interleaved(
+            {"pin": {"url": "old"}, "pin_records": {"pin": {"last_used": 1000, "leases": {}}}}
+        )
+        await pin_demand(registry, now=1700)
+        assert registry.values["pin"] == replacement
+
+    asyncio.run(check())
+
+
 def test_owner_repairs_missing_route_after_cleanup_response_was_lost():
     async def check():
         registry = Registry()
